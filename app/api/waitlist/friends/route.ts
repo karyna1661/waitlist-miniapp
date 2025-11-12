@@ -30,7 +30,9 @@ export async function GET(req: NextRequest) {
     // Get user's following list
     const client = getNeynarClient()
     const followingResp = await client.fetchUserFollowing(fid, { limit: 150 })
-    const followingFids = followingResp.fids ?? []
+    
+    // Extract FIDs from the response - handle both possible response structures
+    const followingFids = (followingResp as any).users?.map((u: any) => u.fid) ?? (followingResp as any).fids ?? []
 
     if (followingFids.length === 0) {
       return NextResponse.json({ friends: [] })
