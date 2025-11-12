@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.2.1",
-    "@neynar/nodejs-sdk": "^5.0.0",
+    "@neynar/nodejs-sdk": "^1.50.0",
     "@supabase/supabase-js": "^2.39.3",
     "next": "16.0.1",
     "react": "^19.0.0",
