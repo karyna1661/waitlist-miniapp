@@ -1,10 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["@neynar/nodejs-sdk"],
-  },
+  serverExternalPackages: ["@neynar/nodejs-sdk"],
   images: {
-    domains: ['letsconnect-waitlist.vercel.app', 'connectwithme-app.vercel.app'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'letsconnect-waitlist.vercel.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'connectwithme-app.vercel.app',
+      },
+    ],
   },
 }
 
