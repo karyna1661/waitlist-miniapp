@@ -1,16 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getNeynarClient } from "@/lib/farcaster-api"
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { fid, username, displayName, pfpUrl, verifiedEthAddresses, custodyAddress } = body
-
-    console.log("Join request body:", body)
-
+    const { fid } = await req.json()
     if (!fid) {
-      return NextResponse.json({ error: "Missing FID" }, { status: 400 })
+      return NextResponse.json(
+        { error: "FID is required" },
+        { status: 400 }
+      )
     }
+
+    const client = getNeynarClient()
+
+    // ✅ Fetch Farcaster user data
+    const userRes = await client.lookupUserByFid(fid)
+
+    if (!userRes?.result?.user) {
+      return NextResponse.json(
+        { error: "User not found on Farcaster" },
+        { status: 404 }
+      )
+    }
+
+    const user = userRes.result.user
+
+    const walletAddress =
+      user.verifications?.eth_addresses?.[0] ?? null
+    const username = user.username ?? null
+    const displayName = user.display_name ?? null
+    const pfp = user.pfp_url ?? null
+    const custodyAddress = user.custody_address ?? null
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -21,57 +42,48 @@ export async function POST(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    // First check if already joined
-    const { data: existing } = await supabase
+    // ✅ Check if already on waitlist
+    const existing = await supabase
       .from("waitlist")
-      .select("fid, joined_at")
+      .select("id")
       .eq("fid", fid)
       .single()
 
-    if (existing) {
-      return NextResponse.json({ 
-        alreadyJoined: true, 
-        joined_at: existing.joined_at,
-        message: "You've already joined the waitlist!" 
-      }, { status: 200 })
+    if (existing.data) {
+      return NextResponse.json({
+        alreadyRegistered: true,
+        message: "User is already on the waitlist",
+        wallet: walletAddress,
+      })
     }
 
-    // Collect all wallet addresses (verified ETH addresses + custody address)
-    const ethAddresses: string[] = Array.isArray(verifiedEthAddresses) ? verifiedEthAddresses : []
-    const allAddresses = Array.from(new Set([...ethAddresses, ...(custodyAddress ? [custodyAddress] : [])]))
-
-    console.log("Storing addresses:", {
-      verifiedEthAddresses: ethAddresses,
-      custodyAddress,
-      allAddresses
+    // ✅ Insert new entry
+    const insertRes = await supabase.from("waitlist").insert({
+      fid,
+      wallet: walletAddress,
+      username,
+      display_name: displayName,
+      pfp,
+      custody_address: custodyAddress,
     })
 
-    const { data, error } = await supabase
-      .from("waitlist")
-      .upsert(
-        {
-          fid,
-          username,
-          display_name: displayName,
-          pfp_url: pfpUrl,
-          eth_addresses: allAddresses,
-          custody_address: custodyAddress ?? null,
-          joined_at: new Date().toISOString(),
-          source: "miniapp",
-        },
-        { onConflict: "fid" }
+    if (insertRes.error) {
+      return NextResponse.json(
+        { error: insertRes.error.message },
+        { status: 500 }
       )
-      .select()
-
-    if (error) {
-      console.error("Supabase insert error", error)
-      return NextResponse.json({ error: "DB error", details: error.message }, { status: 500 })
     }
 
-    console.log("Successfully stored in DB:", data)
-    return NextResponse.json({ success: true, data })
-  } catch (e) {
-    console.error("Join handler error", e)
-    return NextResponse.json({ error: "Unexpected error", details: String(e) }, { status: 500 })
+    return NextResponse.json({
+      success: true,
+      alreadyRegistered: false,
+      wallet: walletAddress,
+    })
+  } catch (err) {
+    console.error("Waitlist POST error:", err)
+    return NextResponse.json(
+      { error: "Unexpected server error" },
+      { status: 500 }
+    )
   }
 }
